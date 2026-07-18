@@ -1,10 +1,10 @@
 use gpui::{
     App, AppContext, Context, Entity, Focusable, Hsla, IntoElement, ParentElement as _, Render,
-    Styled as _, Subscription, Window, div, prelude::FluentBuilder as _,
+    Styled as _, Subscription, Window, div, prelude::FluentBuilder as _, px,
 };
 use gpui_component::{
     ActiveTheme as _, Colorize, Sizable,
-    color_picker::{ColorPicker, ColorPickerEvent, ColorPickerState},
+    color_picker::{ColorPicker, ColorPickerEvent, ColorPickerPanel, ColorPickerState},
     v_flex,
 };
 
@@ -22,7 +22,7 @@ impl super::Story for ColorPickerStory {
     }
 
     fn description() -> &'static str {
-        "A color picker to select color."
+        "Popover and inline controls for selecting a color."
     }
 
     fn new_view(window: &mut Window, cx: &mut App) -> Entity<impl Render> {
@@ -39,9 +39,10 @@ impl ColorPickerStory {
         let color =
             cx.new(|cx| ColorPickerState::new(window, cx).default_value(cx.theme().primary));
 
-        let _subscriptions = vec![cx.subscribe(&color, |this, _, ev, _| match ev {
+        let _subscriptions = vec![cx.subscribe(&color, |this, _, ev, cx| match ev {
             ColorPickerEvent::Change(color) => {
                 this.selected_color = *color;
+                cx.notify();
             }
         })];
 
@@ -61,13 +62,20 @@ impl Focusable for ColorPickerStory {
 
 impl Render for ColorPickerStory {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        v_flex().gap_3().child(
-            section("Normal")
-                .max_w_md()
-                .child(ColorPicker::new(&self.color).small())
-                .when_some(self.selected_color, |this, color| {
-                    this.child(div().w_24().child(color.to_hex()))
-                }),
-        )
+        v_flex()
+            .gap_3()
+            .child(
+                section("Popover")
+                    .max_w_md()
+                    .child(ColorPicker::new(&self.color).small())
+                    .when_some(self.selected_color, |this, color| {
+                        this.child(div().w_24().child(color.to_hex()))
+                    }),
+            )
+            .child(
+                section("Inline Panel")
+                    .max_w_md()
+                    .child(ColorPickerPanel::new(&self.color).size(px(240.))),
+            )
     }
 }

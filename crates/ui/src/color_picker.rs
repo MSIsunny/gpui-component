@@ -6,6 +6,10 @@ use gpui::{
 };
 use rust_i18n::t;
 
+mod panel;
+
+pub use panel::ColorPickerPanel;
+
 use crate::{
     ActiveTheme as _, Colorize as _, Icon, Selectable, Sizable, Size, StyleSized,
     actions::Confirm,
@@ -28,7 +32,7 @@ pub(crate) fn init(cx: &mut App) {
     )])
 }
 
-/// Events emitted by the [`ColorPicker`].
+/// Events emitted by the [`ColorPicker`] and [`ColorPickerPanel`].
 #[derive(Clone)]
 pub enum ColorPickerEvent {
     Change(Option<Hsla>),
@@ -129,7 +133,7 @@ impl HslaSliders {
     }
 }
 
-/// State of the [`ColorPicker`].
+/// State shared by [`ColorPicker`] and [`ColorPickerPanel`].
 pub struct ColorPickerState {
     focus_handle: FocusHandle,
     value: Option<Hsla>,
@@ -140,6 +144,7 @@ pub struct ColorPickerState {
     suppress_input_change: bool,
     active_tab: usize,
     open: bool,
+    panel: panel::ColorPickerPanelState,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -150,6 +155,7 @@ impl ColorPickerState {
             InputState::new(window, cx).pattern(regex::Regex::new(r"^#[0-9a-fA-F]{0,8}$").unwrap())
         });
         let hsla_sliders = HslaSliders::new(cx);
+        let panel = panel::ColorPickerPanelState::new(cx);
 
         let mut _subscriptions = vec![
             cx.subscribe_in(
@@ -221,6 +227,7 @@ impl ColorPickerState {
             suppress_input_change: false,
             active_tab: 0,
             open: false,
+            panel,
             _subscriptions,
         }
     }
@@ -230,6 +237,7 @@ impl ColorPickerState {
         let value = value.into();
         self.value = Some(value);
         self.hovered_color = Some(value);
+        self.panel.set_value(Some(value));
         self.needs_slider_sync = true;
         self
     }
@@ -264,6 +272,7 @@ impl ColorPickerState {
         self.needs_slider_sync = false;
         self.value = value;
         self.hovered_color = value;
+        self.panel.set_value(value);
         // Suppress the InputEvent::Change that set_value will trigger, to avoid
         // the Hsla→hex→Hsla precision loss from feeding back into sync_sliders.
         self.suppress_input_change = true;
@@ -293,12 +302,34 @@ impl ColorPickerState {
         self.needs_slider_sync = false;
         self.value = Some(value);
         self.hovered_color = Some(value);
+        self.panel.set_value(Some(value));
         // Keep the hex input in sync with the slider, but suppress the resulting
         // InputEvent::Change to avoid the Hsla→hex→Hsla precision loss loop.
         self.suppress_input_change = true;
         self.state.update(cx, |view, cx| {
             view.set_value(value.to_hex(), window, cx);
         });
+        if emit {
+            cx.emit(ColorPickerEvent::Change(Some(value)));
+        }
+        cx.notify();
+    }
+
+    fn update_value_from_panel(
+        &mut self,
+        value: Hsla,
+        emit: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.needs_slider_sync = false;
+        self.value = Some(value);
+        self.hovered_color = Some(value);
+        self.suppress_input_change = true;
+        self.state.update(cx, |view, cx| {
+            view.set_value(value.to_hex(), window, cx);
+        });
+        self.sync_sliders(Some(value), window, cx);
         if emit {
             cx.emit(ColorPickerEvent::Change(Some(value)));
         }
